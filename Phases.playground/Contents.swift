@@ -3,78 +3,81 @@
 import UIKit
 import PlaygroundSupport
 
-// MARK: - JSONParent
-struct JSONParent: Codable {
-    let data: JSONData
-}
-
-// MARK: - JSONData
-struct JSONData: Codable {
-    let children: [JSONChild]
-    let after: String
-}
-
-// MARK: - JSONChild
-struct JSONChild: Codable {
-    let data: Comment
-}
-
-// MARK: - Comment
-struct Comment: Codable {
-    let subreddit: String
-    let createdUTC: Int
+class MyViewController: UIViewController {
     
-    enum CodingKeys: String, CodingKey {
-        case subreddit
-        case createdUTC = "created_utc"
-    }
-}
-
-class DataPoint: Equatable, CustomStringConvertible {
-    let daysAgo: Int
-    let subreddit: String
-    var count: Int
+    // fetching
+    var comments = [Comment]()
+    var remainingComments = 0
+    let apiLimit = 100
+    var after = ""
     
-    init(daysAgo: Int, subreddit: String, count: Int) {
-        self.daysAgo = daysAgo
-        self.subreddit = subreddit
-        self.count = count
-    }
+    var maxDaysAgo = 0
     
-    static func == (lhs: DataPoint, rhs: DataPoint) -> Bool {
-        return lhs.daysAgo == rhs.daysAgo && lhs.subreddit == rhs.subreddit
-    }
-    
-    var description: String {
-        return "(\(daysAgo), \(count))"
-    }
-}
-
-enum Period: Int {
-    case hour = 3600
-    case day = 86400
-    case week = 604800
-    case month = 2629743
-    case year = 31556926
-}
-
-//extension Date {
-//    var today: Date {
-//        return Calendar.current.date(bySettingHour: 0, minute: 0, second: 0, of: self)!
-//    }
-//    var dayAfter: Date {
-//        return Calendar.current.date(byAdding: .day, value: 1, to: today)!
-//    }
-//}
-
-class MyViewController : UIViewController {
-    
-    func getCommentsUrl(username: String, limit: Int) -> URL {
-        return URL(string: "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)")!
+    override func loadView() {
+        let view = UIView()
+        
+        // add a line chart for analysis
+        let chart = Chart(frame: CGRect(x: 0, y: 0, width: 750, height: 375))
+        chart.minX = 0
+        chart.minY = 0
+        view.addSubview(chart)
+        
+        self.view = view
+        
+        fetchCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 200) { comments in
+            let groupedDataPoints = self.createGroupedDataPoints(for: comments, period: .week)
+            print(groupedDataPoints)  // helpful for debugging
+            
+            for key in groupedDataPoints.keys {
+                let dataPoints = groupedDataPoints[key] ?? []
+                var daysAgo = 0
+                var points = [Double]()
+                
+                // helper for cleaner code
+                func addPoint(point: Double) {
+                    points.append(point)
+                    daysAgo += 1
+                }
+                
+                for dataPoint in dataPoints {
+                    // fill in points up to first data point
+                    while daysAgo < dataPoint.daysAgo {
+                        addPoint(point: 0)
+                    }
+                    // add point (x: period ago, y: number of comments in sub)
+                    addPoint(point: Double(dataPoint.count))
+                }
+                // fill in points after last data point
+                while daysAgo <= self.maxDaysAgo {
+                    addPoint(point: 0)
+                }
+                
+                // add subreddit line to chart
+                let series = ChartSeries(points)
+                series.color = self.generateRandomColor()
+                series.area = true
+                chart.add(series)
+            }
+        }
     }
     
-    func getCommentsForUser(username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
-        let url = getCommentsUrl(username: username, limit: limit)
+    func generateRandomColor() -> UIColor {
+        return UIColor(red: CGFloat(drand48()), green: CGFloat(drand48()), blue: CGFloat(drand48()), alpha: 1)
+    }
+    
+    func getCommentsUrl(username: String, limit: Int, after: String) -> URL {
+        if after.isEmpty {  // first call
+            return URL(string: "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)")!
+        } else {
+            return URL(string: "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)&after=\(after)")!
+        }
+    }
+
+    func fetchCommentsForUser(username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
+        self.remainingComments = limit
+        let adjustedLimit = limit > apiLimit ? apiLimit : limit
+        
+        let url = getCommentsUrl(username: username, limit: adjustedLimit, after: self.after)
         
         URLSession.shared.dataTask(with: url) { data, response, error in
             if let error = error {
@@ -84,74 +87,23 @@ class MyViewController : UIViewController {
             if let data = data {
                 if let parent = try? JSONDecoder().decode(JSONParent.self, from: data) {
                     let comments = parent.data.children.map { $0.data }
-                    completion(comments)
+                    
+                    self.comments.append(contentsOf: comments)
+                    self.remainingComments -= adjustedLimit
+                    self.after = parent.data.after
+                    
+                    if self.remainingComments > 0 {
+                        self.fetchCommentsForUser(username: username, limit: self.remainingComments, completion: completion)
+                    } else {
+                        completion(self.comments)
+                    }
                 }
             }
         }.resume()
     }
     
-    var maxDaysAgo = 0
-
-    override func loadView() {
-        let view = UIView()
-        
-        let chart = Chart()
-        chart.minX = 0
-        chart.minY = 0
-        chart.frame = CGRect(x: 0, y: 0, width: 750, height: 375)
-        view.addSubview(chart)
-        
-        let colors: [Int: UIColor] = [
-            0: UIColor.red,
-            1: UIColor.orange,
-            2: UIColor.yellow,
-            3: UIColor.green,
-            4: UIColor.blue,
-            5: UIColor.purple,
-            6: ChartColors.purpleColor(),
-            7: ChartColors.maroonColor(),
-            8: ChartColors.pinkColor(),
-            9: ChartColors.greyColor(),
-            10: ChartColors.cyanColor(),
-            11: ChartColors.goldColor(),
-            12: ChartColors.yellowColor(),
-        ]
-        
-        self.view = view
-        
-        // TODO: after param to get more than 100
-        getCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 100) { comments in
-            let groupedDataPoints = self.groupByPeriod(comments, period: .week)
-            var index = 0
-
-            for key in groupedDataPoints.keys {
-                let dataPoints = groupedDataPoints[key] ?? []
-                var daysAgo = 0
-                var points = [Double]()
-                for dataPoint in dataPoints {
-                    while daysAgo < dataPoint.daysAgo {
-                        points.append(0)
-                        daysAgo += 1
-                    }
-                    points.append(Double(dataPoint.count))
-                    daysAgo += 1
-                }
-                while daysAgo <= self.maxDaysAgo {
-                    points.append(0)
-                    daysAgo += 1
-                }
-                let series = ChartSeries(points)
-                series.color = colors[index] ?? UIColor.black
-                series.area = true
-                chart.add(series)
-                
-                index += 1
-            }
-            print(groupedDataPoints)
-        }
-    }
-    
-    func groupByPeriod(_ comments: [Comment], period: Period) -> [String : [DataPoint]] {
+    /// Creates data points grouped by given period (day, week, month) for each subreddit
+    func createGroupedDataPoints(for comments: [Comment], period: Period) -> [String : [DataPoint]] {
         var dataPoints = [DataPoint]()
         
         let now = Int(Date().timeIntervalSince1970)
@@ -160,6 +112,8 @@ class MyViewController : UIViewController {
 
         for comment in comments {
             let date = comment.createdUTC
+            
+            // increase offset until date falls within given period
             while date < now - offset {
                 daysAgo += 1
                 offset = period.rawValue + (daysAgo * period.rawValue)
@@ -169,12 +123,14 @@ class MyViewController : UIViewController {
             let newDataPoint = DataPoint(daysAgo: daysAgo, subreddit: subreddit, count: 1)
             let dataPoint = dataPoints.filter { $0 == newDataPoint }.first
             
+            // modify existing DataPoint if available
             if let dataPoint = dataPoint {
                 dataPoint.count += 1
             } else {
                 dataPoints.append(newDataPoint)
             }
             
+            // kept track of so all series match in length
             if daysAgo > maxDaysAgo {
                 maxDaysAgo = daysAgo
             }
@@ -184,11 +140,8 @@ class MyViewController : UIViewController {
         return groupedDataPoints
     }
 }
+
 // Present the view controller in the Live View window
 let vc = MyViewController()
 vc.preferredContentSize = CGSize(width: 750, height: 375)
 PlaygroundPage.current.liveView = vc
-
-// TODO: Future Plans
-// list all fields as comparable filters
-// show multiple users if added
