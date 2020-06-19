@@ -17,47 +17,65 @@ class MyViewController: UIViewController {
         let view = UIView()
         
         // add a line chart for analysis
-        let chart = Chart(frame: CGRect(x: 0, y: 0, width: 750, height: 375))
+        let chart = Chart(frame: CGRect(x: 0, y: 90, width: 750, height: 375))
         chart.minX = 0
         chart.minY = 0
         view.addSubview(chart)
+        
+        let title = UILabel(frame: CGRect(x: 20, y: 20, width: 200, height: 30))
+        title.font = .systemFont(ofSize: 30, weight: .medium)
+        title.text = "Reddit Phases"
+        view.addSubview(title)
+        
+        let subtitle = UILabel(frame: CGRect(x: 20, y: 45, width: 750, height: 30))
+        subtitle.font = .systemFont(ofSize: 15, weight: .light)
+        subtitle.text = "Enter your reddit username to visualize your subreddit activity"
+        view.addSubview(subtitle)
+        
+        let imageView = UIImageView(frame: CGRect(x: 675, y: 15, width: 60, height: 60))
+        imageView.image = UIImage(named: "reddit-logo")
+        view.addSubview(imageView)
         
         self.view = view
         
         fetchCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 200) { comments in
             let groupedDataPoints = self.createGroupedDataPoints(for: comments, period: .week)
             print(groupedDataPoints)  // helpful for debugging
+            self.graphDataPoints(groupedDataPoints, chart)
+        }
+    }
+    
+    /// Take a dictionary of graph points and plot each series on the given chart
+    func graphDataPoints(_ groupedDataPoints: [String : [DataPoint]], _ chart: Chart) {
+        for key in groupedDataPoints.keys {
+            let dataPoints = groupedDataPoints[key] ?? []
+            var daysAgo = 0
+            var points = [Double]()
             
-            for key in groupedDataPoints.keys {
-                let dataPoints = groupedDataPoints[key] ?? []
-                var daysAgo = 0
-                var points = [Double]()
-                
-                // helper for cleaner code
-                func addPoint(point: Double) {
-                    points.append(point)
-                    daysAgo += 1
-                }
-                
-                for dataPoint in dataPoints {
-                    // fill in points up to first data point
-                    while daysAgo < dataPoint.daysAgo {
-                        addPoint(point: 0)
-                    }
-                    // add point (x: period ago, y: number of comments in sub)
-                    addPoint(point: Double(dataPoint.count))
-                }
-                // fill in points after last data point
-                while daysAgo <= self.maxDaysAgo {
+            // helper for cleaner code
+            func addPoint(point: Double) {
+                points.append(point)
+                daysAgo += 1
+            }
+            
+            for dataPoint in dataPoints {
+                // fill in points up to first data point
+                while daysAgo < dataPoint.daysAgo {
                     addPoint(point: 0)
                 }
-                
-                // add subreddit line to chart
-                let series = ChartSeries(points)
-                series.color = self.generateRandomColor()
-                series.area = true
-                chart.add(series)
+                // add point (x: period ago, y: number of comments in sub)
+                addPoint(point: Double(dataPoint.count))
             }
+            // fill in points after last data point
+            while daysAgo <= self.maxDaysAgo {
+                addPoint(point: 0)
+            }
+            
+            // add subreddit line to chart
+            let series = ChartSeries(points)
+            series.color = self.generateRandomColor()
+            series.area = true
+            chart.add(series)
         }
     }
     
@@ -143,5 +161,5 @@ class MyViewController: UIViewController {
 
 // Present the view controller in the Live View window
 let vc = MyViewController()
-vc.preferredContentSize = CGSize(width: 750, height: 375)
+vc.preferredContentSize = CGSize(width: 750, height: 750)
 PlaygroundPage.current.liveView = vc
