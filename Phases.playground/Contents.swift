@@ -116,12 +116,18 @@ class MyViewController: UIViewController {
         // sort subreddits to be in alphabetical order
         plots.sort(by: { $0.subreddit < $1.subreddit })
         
-        // enable cycle colors button when all series are added
+        // enable cycle colors button, generate legend
         DispatchQueue.main.async {
             self.button.isEnabled = true
             self.legend.reloadData()
         }
+        // show legend scroll indicators
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            self.legend.flashScrollIndicators()
+        }
     }
+    
+    var cycleTimer: Timer!
     
     @objc func cycleColors() {
         for plot in plots {
@@ -131,6 +137,11 @@ class MyViewController: UIViewController {
         chart.removeAllSeries()
         let series = plots.map { $0.series }
         chart.add(series)
+        
+        cycleTimer?.invalidate()
+        cycleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false, block: { _ in
+            self.legend.reloadData()
+        })
     }
     
     func generateRandomColor() -> UIColor {
@@ -222,12 +233,18 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath)
+        cell.backgroundColor = UIColor(white: 0.9, alpha: 1)
+
+        let icon = UIImageView(frame: CGRect(x: 5, y: 5, width: 10, height: 10))
+        icon.image = UIImage.circle(diameter: 10, color: plots[indexPath.row].series.color)
+        cell.contentView.addSubview(icon)
+        
         let label = UILabel()
         label.text = plots[indexPath.row].subreddit
         let size = label.intrinsicContentSize
-        label.frame = CGRect(x: 5, y: 0, width: size.width, height: size.height)
+        label.frame = CGRect(x: 20, y: 0, width: size.width, height: size.height)
         cell.contentView.addSubview(label)
-        cell.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        
         return cell
     }
   
@@ -235,7 +252,7 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
         let label = UILabel()
         label.text = plots[indexPath.row].subreddit
         let size = label.intrinsicContentSize
-        return CGSize(width: size.width + 10, height: size.height)
+        return CGSize(width: size.width + 25, height: size.height)
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -253,6 +270,31 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
         chart.removeAllSeries()
         let series = plots.map { $0.series }
         chart.add(series)
+    }
+}
+
+extension UICollectionViewCell {
+    // reset content view before cell reuse (after scroll)
+    open override func prepareForReuse() {
+        contentView.subviews.forEach { $0.removeFromSuperview() }
+    }
+}
+
+extension UIImage {
+    class func circle(diameter: CGFloat, color: UIColor) -> UIImage {
+        UIGraphicsBeginImageContextWithOptions(CGSize(width: diameter, height: diameter), false, 0)
+        let ctx = UIGraphicsGetCurrentContext()!
+        ctx.saveGState()
+
+        let rect = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+        ctx.setFillColor(color.cgColor)
+        ctx.fillEllipse(in: rect)
+
+        ctx.restoreGState()
+        let img = UIGraphicsGetImageFromCurrentImageContext()!
+        UIGraphicsEndImageContext()
+
+        return img
     }
 }
 
