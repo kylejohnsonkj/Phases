@@ -3,16 +3,6 @@
 import UIKit
 import PlaygroundSupport
 
-class Plot {
-    let subreddit: String
-    let series: ChartSeries
-    
-    init(subreddit: String, series: ChartSeries) {
-        self.subreddit = subreddit
-        self.series = series
-    }
-}
-
 class MyViewController: UIViewController {
     
     // fetching
@@ -136,6 +126,7 @@ class MyViewController: UIViewController {
     @objc func cycleColors() {
         for plot in plots {
             plot.series.color = generateRandomColor()
+            plot.series.areaAlphaComponent = 0.1
         }
         chart.removeAllSeries()
         let series = plots.map { $0.series }
@@ -222,11 +213,7 @@ class MyViewController: UIViewController {
     }
 }
 
-// Present the view controller in the Live View window
-let vc = MyViewController()
-vc.preferredContentSize = CGSize(width: 750, height: 750)
-PlaygroundPage.current.liveView = vc
-
+// Legend
 extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -252,7 +239,24 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        print("User tapped on item \(indexPath.row)")
+        let selectedPlot = plots[indexPath.row]
+        for plot in plots {
+            let color = plot.series.color
+            if plot == selectedPlot {
+                plot.series.color = color.withAlphaComponent(1)
+                plot.series.areaAlphaComponent = 0.3
+            } else {
+                plot.series.color = color.withAlphaComponent(0.05)
+                plot.series.areaAlphaComponent = 0.05
+            }
+        }
+        chart.removeAllSeries()
+        let series = plots.map { $0.series }
+        chart.add(series)
     }
-    
 }
+
+// Present the view controller in the Live View window
+let vc = MyViewController()
+vc.preferredContentSize = CGSize(width: 750, height: 750)
+PlaygroundPage.current.liveView = vc

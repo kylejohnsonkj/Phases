@@ -205,11 +205,6 @@ open class Chart: UIControl {
     */
     open var hideHighlightLineOnTouchEnd = false
 
-    /**
-    Alpha component for the area color.
-    */
-    open var areaAlphaComponent: CGFloat = 0.1
-
     // MARK: Private variables
 
     fileprivate var highlightShapeLayer: CAShapeLayer!
@@ -505,9 +500,9 @@ open class Chart: UIControl {
         areaLayer.path = area
         areaLayer.strokeColor = nil
         if isAboveZeroLine {
-            areaLayer.fillColor = series[seriesIndex].colors.above.withAlphaComponent(areaAlphaComponent).cgColor
+            areaLayer.fillColor = series[seriesIndex].colors.above.withAlphaComponent(series[seriesIndex].areaAlphaComponent).cgColor
         } else {
-            areaLayer.fillColor = series[seriesIndex].colors.below.withAlphaComponent(areaAlphaComponent).cgColor
+            areaLayer.fillColor = series[seriesIndex].colors.below.withAlphaComponent(series[seriesIndex].areaAlphaComponent).cgColor
         }
         areaLayer.lineWidth = 0
 

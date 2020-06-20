@@ -1,5 +1,13 @@
 import Foundation
 
+public enum Period: Int {
+    case hour = 3600
+    case day = 86400
+    case week = 604800
+    case month = 2629743
+    case year = 31556926
+}
+
 public class DataPoint: Equatable, CustomStringConvertible {
     public let daysAgo: Int
     public let subreddit: String
@@ -20,10 +28,16 @@ public class DataPoint: Equatable, CustomStringConvertible {
     }
 }
 
-public enum Period: Int {
-    case hour = 3600
-    case day = 86400
-    case week = 604800
-    case month = 2629743
-    case year = 31556926
+public class Plot: Equatable {
+    public let subreddit: String
+    public let series: ChartSeries
+    
+    public init(subreddit: String, series: ChartSeries) {
+        self.subreddit = subreddit
+        self.series = series
+    }
+    
+    public static func == (lhs: Plot, rhs: Plot) -> Bool {
+        return lhs.subreddit == rhs.subreddit
+    }
 }

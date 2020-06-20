@@ -25,6 +25,11 @@ open class ChartSeries {
     Draws an area below the series line.
     */
     open var area: Bool = false
+    
+    /**
+    Alpha component for the area color.
+    */
+    open var areaAlphaComponent: CGFloat = 0.1
 
     /**
     The series color.
