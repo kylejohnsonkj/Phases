@@ -3,6 +3,13 @@
 import UIKit
 import PlaygroundSupport
 
+// TODO:
+// axix labels
+// show cell selection (border, bg)
+// ability to clear selection
+// loading indicator (percent = limit/apiLimit)
+// filters pane?
+
 class MyViewController: UIViewController {
     
     // fetching
@@ -84,6 +91,22 @@ class MyViewController: UIViewController {
             var daysAgo = 0
             var points = [Double]()
             
+            /* BEGIN FILTERS */
+            let minCommentThreshold = 1
+            let exceedsCommentThreshold = dataPoints
+                .filter { $0.count >= minCommentThreshold }
+                .count > 0
+            if !exceedsCommentThreshold {
+                continue
+            }
+            
+            let minActiveDays = 1
+            let exceedsActiveDaysThreshold = dataPoints.count >= minActiveDays
+            if !exceedsActiveDaysThreshold {
+                continue
+            }
+            /* END FILTERS */
+            
             // helper for cleaner code
             func addPoint(point: Double) {
                 points.append(point)
@@ -114,7 +137,7 @@ class MyViewController: UIViewController {
         }
         
         // sort subreddits to be in alphabetical order
-        plots.sort(by: { $0.subreddit < $1.subreddit })
+        plots.sort(by: { $0.subreddit.lowercased() < $1.subreddit.lowercased() })
         
         // enable cycle colors button, generate legend
         DispatchQueue.main.async {
