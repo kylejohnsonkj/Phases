@@ -7,17 +7,21 @@ class MyViewController: UIViewController {
     
     // fetching
     var comments = [Comment]()
+    var series = [ChartSeries]()
     var remainingComments = 0
     let apiLimit = 100
     var after = ""
     
     var maxDaysAgo = 0
     
+    var chart: Chart!
+    var button: UIButton!
+    
     override func loadView() {
         let view = UIView()
         
         // add a line chart for analysis
-        let chart = Chart(frame: CGRect(x: 0, y: 90, width: 750, height: 375))
+        chart = Chart(frame: CGRect(x: 0, y: 90, width: 750, height: 375))
         chart.minX = 0
         chart.minY = 0
         view.addSubview(chart)
@@ -36,12 +40,22 @@ class MyViewController: UIViewController {
         imageView.image = UIImage(named: "reddit-logo")
         view.addSubview(imageView)
         
+        button = UIButton(frame: CGRect(x: 560, y: 32.5, width: 95, height: 25))
+        button.setTitleColor(.black, for: .normal)
+        button.setTitleColor(.white, for: .disabled)
+        button.setTitle("Cycle Colors", for: .normal)
+        button.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        button.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
+        button.addTarget(self, action: #selector(cycleColors), for: .touchUpInside)
+        button.isEnabled = false
+        view.addSubview(button)
+        
         self.view = view
         
         fetchCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 200) { comments in
             let groupedDataPoints = self.createGroupedDataPoints(for: comments, period: .week)
             print(groupedDataPoints)  // helpful for debugging
-            self.graphDataPoints(groupedDataPoints, chart)
+            self.graphDataPoints(groupedDataPoints, self.chart)
         }
     }
     
@@ -77,6 +91,22 @@ class MyViewController: UIViewController {
             series.area = true
             chart.add(series)
         }
+        self.series = chart.series
+        
+        // enable cycle colors button when all series are added
+        DispatchQueue.main.async {
+            self.button.isEnabled = true
+        }
+    }
+    
+    @objc func cycleColors() {
+        let series = chart.series
+        for series in series {
+            series.color = generateRandomColor()
+        }
+        chart.removeAllSeries()
+        chart.add(series)
+        self.series = series
     }
     
     func generateRandomColor() -> UIColor {
@@ -84,11 +114,11 @@ class MyViewController: UIViewController {
     }
     
     func getCommentsUrl(username: String, limit: Int, after: String) -> URL {
-        if after.isEmpty {  // first call
-            return URL(string: "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)")!
-        } else {
-            return URL(string: "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)&after=\(after)")!
+        var urlString = "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)"
+        if !after.isEmpty {  // subsequent calls
+            urlString += "&after=\(after)"
         }
+        return URL(string: urlString)!
     }
 
     func fetchCommentsForUser(username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
