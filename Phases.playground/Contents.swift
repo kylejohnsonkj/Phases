@@ -3,11 +3,21 @@
 import UIKit
 import PlaygroundSupport
 
+class Plot {
+    let subreddit: String
+    let series: ChartSeries
+    
+    init(subreddit: String, series: ChartSeries) {
+        self.subreddit = subreddit
+        self.series = series
+    }
+}
+
 class MyViewController: UIViewController {
     
     // fetching
     var comments = [Comment]()
-    var series = [ChartSeries]()
+    var plots = [Plot]()
     var remainingComments = 0
     let apiLimit = 100
     var after = ""
@@ -16,6 +26,7 @@ class MyViewController: UIViewController {
     
     var chart: Chart!
     var button: UIButton!
+    var legend: UICollectionView!
     
     override func loadView() {
         let view = UIView()
@@ -49,6 +60,23 @@ class MyViewController: UIViewController {
         button.addTarget(self, action: #selector(cycleColors), for: .touchUpInside)
         button.isEnabled = false
         view.addSubview(button)
+        
+        var flowLayout: AlignedCollectionViewFlowLayout {
+            let layout = AlignedCollectionViewFlowLayout()
+            layout.horizontalAlignment = .left
+            layout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
+            layout.minimumInteritemSpacing = 10
+            layout.minimumLineSpacing = 10
+            return layout
+        }
+        
+        let padding = 10
+        legend = UICollectionView(frame: CGRect(x: 0 + padding, y: 465 + padding, width: 750 - (padding * 2), height: 285 - (padding * 2)), collectionViewLayout: flowLayout)
+        legend.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "Cell")
+        legend.dataSource = self
+        legend.delegate = self
+        legend.backgroundColor = .white
+        view.addSubview(legend)
         
         self.view = view
         
@@ -90,23 +118,28 @@ class MyViewController: UIViewController {
             series.color = self.generateRandomColor()
             series.area = true
             chart.add(series)
+            
+            // pair subreddit with series for legend
+            plots.append(Plot(subreddit: key, series: series))
         }
-        self.series = chart.series
+        
+        // sort subreddits to be in alphabetical order
+        plots.sort(by: { $0.subreddit < $1.subreddit })
         
         // enable cycle colors button when all series are added
         DispatchQueue.main.async {
             self.button.isEnabled = true
+            self.legend.reloadData()
         }
     }
     
     @objc func cycleColors() {
-        let series = chart.series
-        for series in series {
-            series.color = generateRandomColor()
+        for plot in plots {
+            plot.series.color = generateRandomColor()
         }
         chart.removeAllSeries()
+        let series = plots.map { $0.series }
         chart.add(series)
-        self.series = series
     }
     
     func generateRandomColor() -> UIColor {
@@ -193,3 +226,33 @@ class MyViewController: UIViewController {
 let vc = MyViewController()
 vc.preferredContentSize = CGSize(width: 750, height: 750)
 PlaygroundPage.current.liveView = vc
+
+extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
+    
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return plots.count
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath)
+        let label = UILabel()
+        label.text = plots[indexPath.row].subreddit
+        let size = label.intrinsicContentSize
+        label.frame = CGRect(x: 5, y: 0, width: size.width, height: size.height)
+        cell.contentView.addSubview(label)
+        cell.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        return cell
+    }
+  
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let label = UILabel()
+        label.text = plots[indexPath.row].subreddit
+        let size = label.intrinsicContentSize
+        return CGSize(width: size.width + 10, height: size.height)
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        print("User tapped on item \(indexPath.row)")
+    }
+    
+}
