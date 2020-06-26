@@ -9,6 +9,8 @@ import PlaygroundSupport
 // ability to clear selection
 // loading indicator (percent = limit/apiLimit)
 // filters pane?
+// < > to go through subs
+// < > to expand/limit history
 
 class MyViewController: UIViewController {
     
@@ -79,7 +81,6 @@ class MyViewController: UIViewController {
         
         fetchCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 200) { comments in
             let groupedDataPoints = self.createGroupedDataPoints(for: comments, period: .week)
-            print(groupedDataPoints)  // helpful for debugging
             self.graphDataPoints(groupedDataPoints, self.chart)
         }
     }
@@ -139,6 +140,9 @@ class MyViewController: UIViewController {
         // sort subreddits to be in alphabetical order
         plots.sort(by: { $0.subreddit.lowercased() < $1.subreddit.lowercased() })
         
+        // helpful for debugging
+        plots.forEach { print("\($0.subreddit): \(groupedDataPoints[$0.subreddit]!)") }
+        
         // enable cycle colors button, generate legend
         DispatchQueue.main.async {
             self.button.isEnabled = true
@@ -152,14 +156,18 @@ class MyViewController: UIViewController {
     
     var cycleTimer: Timer!
     
+    func redrawChart() {
+        chart.removeAllSeries()
+        let series = plots.map { $0.series }
+        chart.add(series)
+    }
+    
     @objc func cycleColors() {
         for plot in plots {
             plot.series.color = generateRandomColor()
             plot.series.areaAlphaComponent = 0.1
         }
-        chart.removeAllSeries()
-        let series = plots.map { $0.series }
-        chart.add(series)
+        redrawChart()
         
         cycleTimer?.invalidate()
         cycleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false, block: { _ in
@@ -257,9 +265,12 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath)
         cell.backgroundColor = UIColor(white: 0.9, alpha: 1)
-
+        cell.selectedBackgroundView = UIView(frame: cell.bounds)
+        cell.selectedBackgroundView?.backgroundColor = UIColor(white: 0.7, alpha: 1)
+        
         let icon = UIImageView(frame: CGRect(x: 5, y: 5, width: 10, height: 10))
-        icon.image = UIImage.circle(diameter: 10, color: plots[indexPath.row].series.color)
+        let fullAlphaColor = plots[indexPath.row].series.color.withAlphaComponent(1)
+        icon.image = UIImage.circle(diameter: 10, color: fullAlphaColor)
         cell.contentView.addSubview(icon)
         
         let label = UILabel()
@@ -278,6 +289,24 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
         return CGSize(width: size.width + 25, height: size.height)
     }
     
+    func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
+        if let selectedIndexPath = collectionView.indexPathsForSelectedItems?.first, selectedIndexPath == indexPath {
+            collectionView.deselectItem(at: indexPath, animated: true)
+            
+            for plot in plots {
+                let color = plot.series.color
+                plot.series.color = color.withAlphaComponent(1)
+                plot.series.areaAlphaComponent = 0.1
+            }
+            redrawChart()
+            
+            return false
+        }
+        // animate selection
+        collectionView.selectItem(at: indexPath, animated: true, scrollPosition: .left)
+        return true
+    }
+    
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let selectedPlot = plots[indexPath.row]
         for plot in plots {
@@ -290,16 +319,15 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
                 plot.series.areaAlphaComponent = 0.05
             }
         }
-        chart.removeAllSeries()
-        let series = plots.map { $0.series }
-        chart.add(series)
+        redrawChart()
     }
 }
 
 extension UICollectionViewCell {
-    // reset content view before cell reuse (after scroll)
+    // reset cell before reuse (after scroll)
     open override func prepareForReuse() {
         contentView.subviews.forEach { $0.removeFromSuperview() }
+        isSelected = false
     }
 }
 
