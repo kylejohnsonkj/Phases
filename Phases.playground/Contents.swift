@@ -4,9 +4,6 @@ import UIKit
 import PlaygroundSupport
 
 // TODO:
-// axix labels
-// show cell selection (border, bg)
-// ability to clear selection
 // loading indicator (percent = limit/apiLimit)
 // filters pane?
 // < > to go through subs
@@ -31,9 +28,10 @@ class MyViewController: UIViewController {
         let view = UIView()
         
         // add a line chart for analysis
-        chart = Chart(frame: CGRect(x: 0, y: 90, width: 750, height: 375))
+        chart = Chart(frame: CGRect(x: 30, y: 90, width: 720, height: 360))
         chart.minX = 0
         chart.minY = 0
+        chart.hideHighlightLineOnTouchEnd = true
         view.addSubview(chart)
         
         let title = UILabel(frame: CGRect(x: 20, y: 20, width: 200, height: 30))
@@ -52,7 +50,7 @@ class MyViewController: UIViewController {
         
         button = UIButton(frame: CGRect(x: 560, y: 32.5, width: 95, height: 25))
         button.setTitleColor(.black, for: .normal)
-        button.setTitleColor(.white, for: .disabled)
+        button.setTitleColor(.gray, for: .disabled)
         button.setTitle("Cycle Colors", for: .normal)
         button.backgroundColor = UIColor(white: 0.9, alpha: 1)
         button.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
@@ -77,10 +75,28 @@ class MyViewController: UIViewController {
         legend.backgroundColor = .white
         view.addSubview(legend)
         
+        let username = "YOUR_REDDIT_USERNAME"
+        let period = Period.week
+        
+        let xAxisLabel = UILabel()
+        xAxisLabel.font = .systemFont(ofSize: 13)
+        xAxisLabel.frame = CGRect(x: 275, y: 448, width: 200, height: 20)
+        xAxisLabel.text = "# of \(period)s ago"
+        xAxisLabel.textAlignment = .center
+        view.addSubview(xAxisLabel)
+        
+        let yAxisLabel = UILabel()
+        yAxisLabel.font = .systemFont(ofSize: 13)
+        yAxisLabel.frame = CGRect(x: -85, y: 250, width: 200, height: 20)
+        yAxisLabel.text = "# of comments"
+        yAxisLabel.textAlignment = .center
+        yAxisLabel.transform = CGAffineTransform(rotationAngle: (-90 * .pi) / 180)
+        view.addSubview(yAxisLabel)
+        
         self.view = view
         
-        fetchCommentsForUser(username: "YOUR_REDDIT_USERNAME", limit: 200) { comments in
-            let groupedDataPoints = self.createGroupedDataPoints(for: comments, period: .week)
+        fetchCommentsForUser(username, limit: 200) { comments in
+            let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
             self.graphDataPoints(groupedDataPoints, self.chart)
         }
     }
@@ -187,7 +203,7 @@ class MyViewController: UIViewController {
         return URL(string: urlString)!
     }
 
-    func fetchCommentsForUser(username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
+    func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
         self.remainingComments = limit
         let adjustedLimit = limit > apiLimit ? apiLimit : limit
         
@@ -207,7 +223,7 @@ class MyViewController: UIViewController {
                     self.after = parent.data.after
                     
                     if self.remainingComments > 0 {
-                        self.fetchCommentsForUser(username: username, limit: self.remainingComments, completion: completion)
+                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
                     } else {
                         completion(self.comments)
                     }
@@ -217,7 +233,7 @@ class MyViewController: UIViewController {
     }
     
     /// Creates data points grouped by given period (day, week, month) for each subreddit
-    func createGroupedDataPoints(for comments: [Comment], period: Period) -> [String : [DataPoint]] {
+    func createGroupedDataPoints(for comments: [Comment], _ period: Period) -> [String : [DataPoint]] {
         var dataPoints = [DataPoint]()
         
         let now = Int(Date().timeIntervalSince1970)
