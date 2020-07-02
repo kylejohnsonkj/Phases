@@ -4,10 +4,12 @@ import UIKit
 import PlaygroundSupport
 
 // TODO:
-// loading indicator (percent = limit/apiLimit)
 // filters pane?
 // < > to go through subs
 // < > to expand/limit history
+// add select up to 1000 comments (limit)
+// handle users with less comments than limit
+// organize views and functions
 
 class MyViewController: UIViewController {
     
@@ -24,6 +26,10 @@ class MyViewController: UIViewController {
     var button: UIButton!
     var legend: UICollectionView!
     
+    var loadingView: UIView!
+    var loadingLabel: UILabel!
+    var loadingIndicator: UIActivityIndicatorView!
+    
     override func loadView() {
         let view = UIView()
         
@@ -34,12 +40,12 @@ class MyViewController: UIViewController {
         chart.hideHighlightLineOnTouchEnd = true
         view.addSubview(chart)
         
-        let title = UILabel(frame: CGRect(x: 20, y: 20, width: 200, height: 30))
+        let title = UILabel(frame: CGRect(x: 30, y: 20, width: 200, height: 30))
         title.font = .systemFont(ofSize: 30, weight: .medium)
         title.text = "Reddit Phases"
         view.addSubview(title)
         
-        let subtitle = UILabel(frame: CGRect(x: 20, y: 45, width: 750, height: 30))
+        let subtitle = UILabel(frame: CGRect(x: 30, y: 45, width: 750, height: 30))
         subtitle.font = .systemFont(ofSize: 15, weight: .light)
         subtitle.text = "Enter your reddit username to visualize your subreddit activity"
         view.addSubview(subtitle)
@@ -48,6 +54,25 @@ class MyViewController: UIViewController {
         imageView.image = UIImage(named: "reddit-logo")
         view.addSubview(imageView)
         
+        loadingView = UIView(frame: CGRect(x: 300, y: 200, width: 150, height: 100))
+        loadingView.backgroundColor = UIColor(white: 0.25, alpha: 0.75)
+        loadingView.roundCorners(corners: .allCorners, radius: 10)
+        
+        loadingIndicator = UIActivityIndicatorView(style: .large)
+        loadingIndicator.color = .white
+        loadingIndicator.frame = CGRect(x: 50, y: 10, width: 50, height: 50)
+        loadingIndicator.hidesWhenStopped = false
+        loadingView.addSubview(loadingIndicator)
+
+        loadingLabel = UILabel(frame: CGRect(x: 0, y: 60, width: 150, height: 30))
+        loadingLabel.font = .systemFont(ofSize: 18, weight: .medium)
+        loadingLabel.textAlignment = .center
+        loadingLabel.textColor = .white
+        loadingLabel.text = "Started: 0%"
+        loadingView.addSubview(loadingLabel)
+        
+        view.addSubview(loadingView)
+
         button = UIButton(frame: CGRect(x: 560, y: 32.5, width: 95, height: 25))
         button.setTitleColor(.black, for: .normal)
         button.setTitleColor(.gray, for: .disabled)
@@ -76,7 +101,7 @@ class MyViewController: UIViewController {
         view.addSubview(legend)
         
         let username = "YOUR_REDDIT_USERNAME"
-        let period = Period.week
+        let period = Period.month
         
         let xAxisLabel = UILabel()
         xAxisLabel.font = .systemFont(ofSize: 13)
@@ -95,15 +120,17 @@ class MyViewController: UIViewController {
         
         self.view = view
         
-        fetchCommentsForUser(username, limit: 200) { comments in
-            let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
-            self.graphDataPoints(groupedDataPoints, self.chart)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            self.fetchCommentsForUser(username, limit: 1000) { comments in
+                let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
+                self.graphDataPoints(groupedDataPoints, self.chart)
+            }
         }
     }
     
     /// Take a dictionary of graph points and plot each series on the given chart
     func graphDataPoints(_ groupedDataPoints: [String : [DataPoint]], _ chart: Chart) {
-        for key in groupedDataPoints.keys {
+        for (index, key) in groupedDataPoints.keys.enumerated() {
             let dataPoints = groupedDataPoints[key] ?? []
             var daysAgo = 0
             var points = [Double]()
@@ -149,6 +176,12 @@ class MyViewController: UIViewController {
             series.area = true
             chart.add(series)
             
+            DispatchQueue.main.async {
+                // update loading indicator
+                let percentage = Double(index) / Double(groupedDataPoints.count)
+                self.loadingLabel.text = "Graphing: \(80 + Int((percentage * 100) / 6.66666666666))%"
+            }
+            
             // pair subreddit with series for legend
             plots.append(Plot(subreddit: key, series: series))
         }
@@ -161,12 +194,18 @@ class MyViewController: UIViewController {
         
         // enable cycle colors button, generate legend
         DispatchQueue.main.async {
+            self.loadingLabel.text = "Finished: 100%"
+            self.loadingIndicator.stopAnimating()
             self.button.isEnabled = true
             self.legend.reloadData()
         }
         // show legend scroll indicators
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             self.legend.flashScrollIndicators()
+        }
+        // remove loading view
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.loadingView.removeFromSuperview()
         }
     }
     
@@ -207,6 +246,15 @@ class MyViewController: UIViewController {
         self.remainingComments = limit
         let adjustedLimit = limit > apiLimit ? apiLimit : limit
         
+        DispatchQueue.main.async {
+            // update loading indicator (first 40%)
+            if !self.loadingIndicator.isAnimating {
+                self.loadingIndicator.startAnimating()
+            }
+            let percentage = Double(adjustedLimit) / Double(limit)
+            self.loadingLabel.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
+        }
+        
         let url = getCommentsUrl(username: username, limit: adjustedLimit, after: self.after)
         
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -240,7 +288,7 @@ class MyViewController: UIViewController {
         var daysAgo = 0
         var offset = period.rawValue
 
-        for comment in comments {
+        for (index, comment) in comments.enumerated() {
             let date = comment.createdUTC
             
             // increase offset until date falls within given period
@@ -263,6 +311,12 @@ class MyViewController: UIViewController {
             // kept track of so all series match in length
             if daysAgo > maxDaysAgo {
                 maxDaysAgo = daysAgo
+            }
+            
+            DispatchQueue.main.async {
+                // update loading indicator
+                let percentage = Double(index) / Double(comments.count)
+                self.loadingLabel.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
             }
         }
         
@@ -362,6 +416,16 @@ extension UIImage {
         UIGraphicsEndImageContext()
 
         return img
+    }
+}
+
+// using this extension avoids a playground crash when setting layer.cornerRadius
+extension UIView {
+   func roundCorners(corners: UIRectCorner, radius: CGFloat) {
+        let path = UIBezierPath(roundedRect: bounds, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        let mask = CAShapeLayer()
+        mask.path = path.cgPath
+        layer.mask = mask
     }
 }
 
