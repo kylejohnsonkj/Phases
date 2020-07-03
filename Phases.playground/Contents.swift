@@ -3,6 +3,16 @@
 import UIKit
 import PlaygroundSupport
 
+enum Period: Int {
+    case day = 86400
+    case week = 604800
+    case month = 2629743
+}
+
+let username = "YOUR_REDDIT_USERNAME"
+let period = Period.week
+let maxComments = 200
+
 // TODO:
 // filters pane?
 // < > to go through subs
@@ -100,9 +110,6 @@ class MyViewController: UIViewController {
         legend.backgroundColor = .white
         view.addSubview(legend)
         
-        let username = "YOUR_REDDIT_USERNAME"
-        let period = Period.month
-        
         let xAxisLabel = UILabel()
         xAxisLabel.font = .systemFont(ofSize: 13)
         xAxisLabel.frame = CGRect(x: 275, y: 448, width: 200, height: 20)
@@ -121,7 +128,7 @@ class MyViewController: UIViewController {
         self.view = view
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.fetchCommentsForUser(username, limit: 1000) { comments in
+            self.fetchCommentsForUser(username, limit: maxComments) { comments in
                 let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
                 self.graphDataPoints(groupedDataPoints, self.chart)
             }
