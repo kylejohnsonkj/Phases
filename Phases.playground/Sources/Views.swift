@@ -12,7 +12,7 @@ public class HeaderView: UIView {
         title.text = "Reddit Phases"
         self.addSubview(title)
         
-        let subtitle = UILabel(frame: CGRect(x: 30, y: 45, width: 750, height: 30))
+        let subtitle = UILabel(frame: CGRect(x: 30, y: 45, width: 450, height: 30))
         subtitle.font = .systemFont(ofSize: 15, weight: .light)
         subtitle.text = "Enter your reddit username to visualize your subreddit activity"
         self.addSubview(subtitle)

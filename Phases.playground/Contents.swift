@@ -7,11 +7,13 @@ let username = "YOUR_REDDIT_USERNAME"
 let period: Period /* .day, .week, .month */ = .week
 let maxComments /* min: 1, max: 1000 */ = 200
 
+// filters
+let minCommentThreshold = 1
+let minActiveDays = 1
+
 // TODO:
-// filters pane?
 // < > to go through subs
 // < > to expand/limit history
-// add select up to 1000 comments (limit)
 
 class MyViewController: UIViewController {
     
@@ -30,6 +32,7 @@ class MyViewController: UIViewController {
     // graphing
     var chart: Chart!
     var legend: Legend!
+    var cycleTimer: Timer!
     var maxDaysAgo = 0
     
     override func loadView() {
@@ -69,15 +72,110 @@ class MyViewController: UIViewController {
         }
     }
     
-    /// Take a dictionary of graph points and plot each series on the given chart
+    func getCommentsUrl(username: String, limit: Int, after: String?) -> URL {
+        var urlString = "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)"
+        if let after = after {  // subsequent calls
+            urlString += "&after=\(after)"
+        }
+        return URL(string: urlString)!
+    }
+    
+    // MARK: - STEP 1
+    /// Fetch user comments from the reddit api, recursively called until complete
+    func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
+        let limit = limit.clamped(1, 1000)
+        self.remainingComments = limit
+        let fetchLimit = limit > apiLimit ? apiLimit : limit
+        
+        DispatchQueue.main.async {
+            // update loading indicator (first 40%)
+            if !self.loadingView.indicator.isAnimating {
+                self.loadingView.indicator.startAnimating()
+            }
+            let percentage = Double(fetchLimit) / Double(limit)
+            self.loadingView.label.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
+        }
+        
+        let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                print("Error: \(error.localizedDescription)")
+                return
+            }
+            if let data = data {
+                if let parent = try? JSONDecoder().decode(JSONParent.self, from: data) {
+                    let comments = parent.data.children.map { $0.data }
+                    
+                    self.comments.append(contentsOf: comments)
+                    self.remainingComments -= fetchLimit
+                    self.after = parent.data.after
+                    
+                    // only finish when all comments are fetched
+                    if self.remainingComments == 0 || self.after == nil {
+                        completion(self.comments)
+                    } else {
+                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
+                    }
+                }
+            }
+        }.resume()
+    }
+    
+    // MARK: - STEP 2
+    /// Creates data points grouped by given period (day, week, month) for each subreddit
+    func createGroupedDataPoints(for comments: [Comment], _ period: Period) -> [String : [DataPoint]] {
+        var dataPoints = [DataPoint]()
+        
+        let now = Int(Date().timeIntervalSince1970)
+        var daysAgo = 0
+        var offset = period.rawValue
+
+        for (index, comment) in comments.enumerated() {
+            let date = comment.createdUTC
+            
+            // increase offset until date falls within given period
+            while date < now - offset {
+                daysAgo += 1
+                offset = period.rawValue + (daysAgo * period.rawValue)
+            }
+            
+            let subreddit = comment.subreddit
+            let newDataPoint = DataPoint(daysAgo: daysAgo, subreddit: subreddit, count: 1)
+            let dataPoint = dataPoints.filter { $0 == newDataPoint }.first
+            
+            // modify existing DataPoint if available
+            if let dataPoint = dataPoint {
+                dataPoint.count += 1
+            } else {
+                dataPoints.append(newDataPoint)
+            }
+            
+            // kept track of so all series match in length
+            if daysAgo > maxDaysAgo {
+                maxDaysAgo = daysAgo
+            }
+            
+            DispatchQueue.main.async {
+                // update loading indicator
+                let percentage = Double(index) / Double(comments.count)
+                self.loadingView.label.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
+            }
+        }
+        
+        let groupedDataPoints = Dictionary(grouping: dataPoints, by: { $0.subreddit })
+        return groupedDataPoints
+    }
+    
+    // MARK: - STEP 3
+    /// Take a dictionary of graph points and plot each series on the chart
     func graphDataPoints(_ groupedDataPoints: [String : [DataPoint]], _ chart: Chart) {
         for (index, key) in groupedDataPoints.keys.enumerated() {
             let dataPoints = groupedDataPoints[key] ?? []
             var daysAgo = 0
             var points = [Double]()
             
-            /* BEGIN FILTERS */
-            let minCommentThreshold = 1
+            /* begin filters */
             let exceedsCommentThreshold = dataPoints
                 .filter { $0.count >= minCommentThreshold }
                 .count > 0
@@ -85,12 +183,11 @@ class MyViewController: UIViewController {
                 continue
             }
             
-            let minActiveDays = 1
             let exceedsActiveDaysThreshold = dataPoints.count >= minActiveDays
             if !exceedsActiveDaysThreshold {
                 continue
             }
-            /* END FILTERS */
+            /* end filters */
             
             // helper for cleaner code
             func addPoint(point: Double) {
@@ -150,14 +247,8 @@ class MyViewController: UIViewController {
         }
     }
     
-    var cycleTimer: Timer!
-    
-    func redrawChart() {
-        chart.removeAllSeries()
-        let series = plots.map { $0.series }
-        chart.add(series)
-    }
-    
+    // UIButton action to cycle colors
+    // run after delay for UI responsiveness
     @objc func cycleColors() {
         for plot in plots {
             plot.series.color = generateRandomColor()
@@ -171,104 +262,18 @@ class MyViewController: UIViewController {
         })
     }
     
+    func redrawChart() {
+        chart.removeAllSeries()
+        let series = plots.map { $0.series }
+        chart.add(series)
+    }
+    
     func generateRandomColor() -> UIColor {
         return UIColor(red: CGFloat(drand48()), green: CGFloat(drand48()), blue: CGFloat(drand48()), alpha: 1)
     }
-    
-    func getCommentsUrl(username: String, limit: Int, after: String?) -> URL {
-        var urlString = "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)"
-        if let after = after {  // subsequent calls
-            urlString += "&after=\(after)"
-        }
-        return URL(string: urlString)!
-    }
-
-    func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
-        let limit = limit.clamped(1, 1000)
-        self.remainingComments = limit
-        let fetchLimit = limit > apiLimit ? apiLimit : limit
-        
-        DispatchQueue.main.async {
-            // update loading indicator (first 40%)
-            if !self.loadingView.indicator.isAnimating {
-                self.loadingView.indicator.startAnimating()
-            }
-            let percentage = Double(fetchLimit) / Double(limit)
-            self.loadingView.label.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
-        }
-        
-        let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
-        
-        URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                print("Error: \(error.localizedDescription)")
-                return
-            }
-            if let data = data {
-                if let parent = try? JSONDecoder().decode(JSONParent.self, from: data) {
-                    let comments = parent.data.children.map { $0.data }
-                    
-                    self.comments.append(contentsOf: comments)
-                    self.remainingComments -= fetchLimit
-                    self.after = parent.data.after
-                    
-                    // only finish when all comments are fetched
-                    if self.remainingComments == 0 || self.after == nil {
-                        completion(self.comments)
-                    } else {
-                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
-                    }
-                }
-            }
-        }.resume()
-    }
-    
-    /// Creates data points grouped by given period (day, week, month) for each subreddit
-    func createGroupedDataPoints(for comments: [Comment], _ period: Period) -> [String : [DataPoint]] {
-        var dataPoints = [DataPoint]()
-        
-        let now = Int(Date().timeIntervalSince1970)
-        var daysAgo = 0
-        var offset = period.rawValue
-
-        for (index, comment) in comments.enumerated() {
-            let date = comment.createdUTC
-            
-            // increase offset until date falls within given period
-            while date < now - offset {
-                daysAgo += 1
-                offset = period.rawValue + (daysAgo * period.rawValue)
-            }
-            
-            let subreddit = comment.subreddit
-            let newDataPoint = DataPoint(daysAgo: daysAgo, subreddit: subreddit, count: 1)
-            let dataPoint = dataPoints.filter { $0 == newDataPoint }.first
-            
-            // modify existing DataPoint if available
-            if let dataPoint = dataPoint {
-                dataPoint.count += 1
-            } else {
-                dataPoints.append(newDataPoint)
-            }
-            
-            // kept track of so all series match in length
-            if daysAgo > maxDaysAgo {
-                maxDaysAgo = daysAgo
-            }
-            
-            DispatchQueue.main.async {
-                // update loading indicator
-                let percentage = Double(index) / Double(comments.count)
-                self.loadingView.label.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
-            }
-        }
-        
-        let groupedDataPoints = Dictionary(grouping: dataPoints, by: { $0.subreddit })
-        return groupedDataPoints
-    }
 }
 
-// Legend
+// MARK: - Chart Legend
 extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -333,6 +338,14 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
             }
         }
         redrawChart()
+    }
+}
+
+extension UICollectionViewCell {
+    // reset cell before reuse (after scroll)
+    open override func prepareForReuse() {
+        contentView.subviews.forEach { $0.removeFromSuperview() }
+        isSelected = false
     }
 }
 
