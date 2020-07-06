@@ -8,7 +8,7 @@ public struct JSONParent: Codable {
 // MARK: - JSONData
 public struct JSONData: Codable {
     public let children: [JSONChild]
-    public let after: String
+    public let after: String?
 }
 
 // MARK: - JSONChild

@@ -3,22 +3,15 @@
 import UIKit
 import PlaygroundSupport
 
-enum Period: Int {
-    case day = 86400
-    case week = 604800
-    case month = 2629743
-}
-
 let username = "YOUR_REDDIT_USERNAME"
-let period = Period.week
-let maxComments = 200
+let period: Period /* .day, .week, .month */ = .week
+let maxComments /* min: 1, max: 1000 */ = 200
 
 // TODO:
 // filters pane?
 // < > to go through subs
 // < > to expand/limit history
 // add select up to 1000 comments (limit)
-// handle users with less comments than limit
 // organize views and functions
 
 class MyViewController: UIViewController {
@@ -28,7 +21,7 @@ class MyViewController: UIViewController {
     var plots = [Plot]()
     var remainingComments = 0
     let apiLimit = 100
-    var after = ""
+    var after: String?
     
     var maxDaysAgo = 0
     
@@ -241,28 +234,29 @@ class MyViewController: UIViewController {
         return UIColor(red: CGFloat(drand48()), green: CGFloat(drand48()), blue: CGFloat(drand48()), alpha: 1)
     }
     
-    func getCommentsUrl(username: String, limit: Int, after: String) -> URL {
+    func getCommentsUrl(username: String, limit: Int, after: String?) -> URL {
         var urlString = "https://www.reddit.com/user/\(username)/comments/.json?limit=\(limit)"
-        if !after.isEmpty {  // subsequent calls
+        if let after = after {  // subsequent calls
             urlString += "&after=\(after)"
         }
         return URL(string: urlString)!
     }
 
     func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
+        let limit = limit.clamped(1, 1000)
         self.remainingComments = limit
-        let adjustedLimit = limit > apiLimit ? apiLimit : limit
+        let fetchLimit = limit > apiLimit ? apiLimit : limit
         
         DispatchQueue.main.async {
             // update loading indicator (first 40%)
             if !self.loadingIndicator.isAnimating {
                 self.loadingIndicator.startAnimating()
             }
-            let percentage = Double(adjustedLimit) / Double(limit)
+            let percentage = Double(fetchLimit) / Double(limit)
             self.loadingLabel.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
         }
         
-        let url = getCommentsUrl(username: username, limit: adjustedLimit, after: self.after)
+        let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
         
         URLSession.shared.dataTask(with: url) { data, response, error in
             if let error = error {
@@ -274,13 +268,14 @@ class MyViewController: UIViewController {
                     let comments = parent.data.children.map { $0.data }
                     
                     self.comments.append(contentsOf: comments)
-                    self.remainingComments -= adjustedLimit
+                    self.remainingComments -= fetchLimit
                     self.after = parent.data.after
                     
-                    if self.remainingComments > 0 {
-                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
-                    } else {
+                    // only finish when all comments are fetched
+                    if self.remainingComments == 0 || self.after == nil {
                         completion(self.comments)
+                    } else {
+                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
                     }
                 }
             }
@@ -433,6 +428,15 @@ extension UIView {
         let mask = CAShapeLayer()
         mask.path = path.cgPath
         layer.mask = mask
+    }
+}
+
+extension Comparable {
+    func clamped(_ low: Self, _ high: Self)  ->  Self {
+        var num = self
+        if num < low { num = low }
+        if num > high { num = high }
+        return num
     }
 }
 

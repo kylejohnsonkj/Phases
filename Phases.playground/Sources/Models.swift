@@ -1,5 +1,11 @@
 import Foundation
 
+public enum Period: Int {
+    case day = 86400
+    case week = 604800
+    case month = 2629743
+}
+
 public class DataPoint: Equatable, CustomStringConvertible {
     public let daysAgo: Int
     public let subreddit: String
