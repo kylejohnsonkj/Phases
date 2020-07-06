@@ -12,119 +12,60 @@ let maxComments /* min: 1, max: 1000 */ = 200
 // < > to go through subs
 // < > to expand/limit history
 // add select up to 1000 comments (limit)
-// organize views and functions
 
 class MyViewController: UIViewController {
     
-    // fetching
     var comments = [Comment]()
     var plots = [Plot]()
+
+    // view containers
+    var header: HeaderView!
+    var loadingView: LoadingView!
+
+    // fetching
     var remainingComments = 0
     let apiLimit = 100
     var after: String?
     
-    var maxDaysAgo = 0
-    
+    // graphing
     var chart: Chart!
-    var button: UIButton!
-    var legend: UICollectionView!
-    
-    var loadingView: UIView!
-    var loadingLabel: UILabel!
-    var loadingIndicator: UIActivityIndicatorView!
+    var legend: Legend!
+    var maxDaysAgo = 0
     
     override func loadView() {
         let view = UIView()
         
-        // add a line chart for analysis
+        // create header (title, subtitle, cycle button, icon)
+        header = HeaderView(frame: CGRect(x: 0, y: 0, width: 750, height: 90))
+        header.cycleButton.addTarget(self, action: #selector(cycleColors), for: .touchUpInside)
+        view.addSubview(header)
+        
+        // add line chart for analysis
         chart = Chart(frame: CGRect(x: 30, y: 90, width: 720, height: 360))
         chart.minX = 0
         chart.minY = 0
         chart.hideHighlightLineOnTouchEnd = true
         view.addSubview(chart)
         
-        let title = UILabel(frame: CGRect(x: 30, y: 20, width: 200, height: 30))
-        title.font = .systemFont(ofSize: 30, weight: .medium)
-        title.text = "Reddit Phases"
-        view.addSubview(title)
+        // add labels for each axis
+        let axisLabels = [AxisLabel(.x, period), AxisLabel(.y)]
+        axisLabels.forEach { view.addSubview($0) }
         
-        let subtitle = UILabel(frame: CGRect(x: 30, y: 45, width: 750, height: 30))
-        subtitle.font = .systemFont(ofSize: 15, weight: .light)
-        subtitle.text = "Enter your reddit username to visualize your subreddit activity"
-        view.addSubview(subtitle)
-        
-        let imageView = UIImageView(frame: CGRect(x: 675, y: 15, width: 60, height: 60))
-        imageView.image = UIImage(named: "reddit-logo")
-        view.addSubview(imageView)
-        
-        loadingView = UIView(frame: CGRect(x: 300, y: 200, width: 150, height: 100))
-        loadingView.backgroundColor = UIColor(white: 0.25, alpha: 0.75)
-        loadingView.roundCorners(corners: .allCorners, radius: 10)
-        
-        loadingIndicator = UIActivityIndicatorView(style: .large)
-        loadingIndicator.color = .white
-        loadingIndicator.frame = CGRect(x: 50, y: 10, width: 50, height: 50)
-        loadingIndicator.hidesWhenStopped = false
-        loadingView.addSubview(loadingIndicator)
-
-        loadingLabel = UILabel(frame: CGRect(x: 0, y: 60, width: 150, height: 30))
-        loadingLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        loadingLabel.textAlignment = .center
-        loadingLabel.textColor = .white
-        loadingLabel.text = "Started: 0%"
-        loadingView.addSubview(loadingLabel)
-        
-        view.addSubview(loadingView)
-
-        button = UIButton(frame: CGRect(x: 560, y: 32.5, width: 95, height: 25))
-        button.setTitleColor(.black, for: .normal)
-        button.setTitleColor(.gray, for: .disabled)
-        button.setTitle("Cycle Colors", for: .normal)
-        button.backgroundColor = UIColor(white: 0.9, alpha: 1)
-        button.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
-        button.addTarget(self, action: #selector(cycleColors), for: .touchUpInside)
-        button.isEnabled = false
-        view.addSubview(button)
-        
-        var flowLayout: AlignedCollectionViewFlowLayout {
-            let layout = AlignedCollectionViewFlowLayout()
-            layout.horizontalAlignment = .left
-            layout.estimatedItemSize = UICollectionViewFlowLayout.automaticSize
-            layout.minimumInteritemSpacing = 10
-            layout.minimumLineSpacing = 10
-            return layout
-        }
-        
-        let padding = 10
-        legend = UICollectionView(frame: CGRect(x: 0 + padding, y: 465 + padding, width: 750 - (padding * 2), height: 285 - (padding * 2)), collectionViewLayout: flowLayout)
-        legend.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "Cell")
+        // add legend for associated subreddits
+        legend = Legend(frame: CGRect(x: 0, y: 465, width: 750, height: 285), padding: 10)
         legend.dataSource = self
         legend.delegate = self
-        legend.backgroundColor = .white
         view.addSubview(legend)
         
-        let xAxisLabel = UILabel()
-        xAxisLabel.font = .systemFont(ofSize: 13)
-        xAxisLabel.frame = CGRect(x: 275, y: 448, width: 200, height: 20)
-        xAxisLabel.text = "# of \(period)s ago"
-        xAxisLabel.textAlignment = .center
-        view.addSubview(xAxisLabel)
-        
-        let yAxisLabel = UILabel()
-        yAxisLabel.font = .systemFont(ofSize: 13)
-        yAxisLabel.frame = CGRect(x: -85, y: 250, width: 200, height: 20)
-        yAxisLabel.text = "# of comments"
-        yAxisLabel.textAlignment = .center
-        yAxisLabel.transform = CGAffineTransform(rotationAngle: (-90 * .pi) / 180)
-        view.addSubview(yAxisLabel)
+        // create loading view for fetching, parsing, graphing
+        loadingView = LoadingView(frame: CGRect(x: 300, y: 200, width: 150, height: 100))
+        view.addSubview(loadingView)
         
         self.view = view
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.fetchCommentsForUser(username, limit: maxComments) { comments in
-                let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
-                self.graphDataPoints(groupedDataPoints, self.chart)
-            }
+        fetchCommentsForUser(username, limit: maxComments) { comments in
+            let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
+            self.graphDataPoints(groupedDataPoints, self.chart)
         }
     }
     
@@ -179,7 +120,7 @@ class MyViewController: UIViewController {
             DispatchQueue.main.async {
                 // update loading indicator
                 let percentage = Double(index) / Double(groupedDataPoints.count)
-                self.loadingLabel.text = "Graphing: \(80 + Int((percentage * 100) / 6.66666666666))%"
+                self.loadingView.label.text = "Graphing: \(80 + Int((percentage * 100) / 6.66666666666))%"
             }
             
             // pair subreddit with series for legend
@@ -194,9 +135,9 @@ class MyViewController: UIViewController {
         
         // enable cycle colors button, generate legend
         DispatchQueue.main.async {
-            self.loadingLabel.text = "Finished: 100%"
-            self.loadingIndicator.stopAnimating()
-            self.button.isEnabled = true
+            self.loadingView.label.text = "Finished: 100%"
+            self.loadingView.indicator.stopAnimating()
+            self.header.cycleButton.isEnabled = true
             self.legend.reloadData()
         }
         // show legend scroll indicators
@@ -249,11 +190,11 @@ class MyViewController: UIViewController {
         
         DispatchQueue.main.async {
             // update loading indicator (first 40%)
-            if !self.loadingIndicator.isAnimating {
-                self.loadingIndicator.startAnimating()
+            if !self.loadingView.indicator.isAnimating {
+                self.loadingView.indicator.startAnimating()
             }
             let percentage = Double(fetchLimit) / Double(limit)
-            self.loadingLabel.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
+            self.loadingView.label.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
         }
         
         let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
@@ -318,7 +259,7 @@ class MyViewController: UIViewController {
             DispatchQueue.main.async {
                 // update loading indicator
                 let percentage = Double(index) / Double(comments.count)
-                self.loadingLabel.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
+                self.loadingView.label.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
             }
         }
         
@@ -392,51 +333,6 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
             }
         }
         redrawChart()
-    }
-}
-
-extension UICollectionViewCell {
-    // reset cell before reuse (after scroll)
-    open override func prepareForReuse() {
-        contentView.subviews.forEach { $0.removeFromSuperview() }
-        isSelected = false
-    }
-}
-
-extension UIImage {
-    class func circle(diameter: CGFloat, color: UIColor) -> UIImage {
-        UIGraphicsBeginImageContextWithOptions(CGSize(width: diameter, height: diameter), false, 0)
-        let ctx = UIGraphicsGetCurrentContext()!
-        ctx.saveGState()
-
-        let rect = CGRect(x: 0, y: 0, width: diameter, height: diameter)
-        ctx.setFillColor(color.cgColor)
-        ctx.fillEllipse(in: rect)
-
-        ctx.restoreGState()
-        let img = UIGraphicsGetImageFromCurrentImageContext()!
-        UIGraphicsEndImageContext()
-
-        return img
-    }
-}
-
-// using this extension avoids a playground crash when setting layer.cornerRadius
-extension UIView {
-   func roundCorners(corners: UIRectCorner, radius: CGFloat) {
-        let path = UIBezierPath(roundedRect: bounds, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        let mask = CAShapeLayer()
-        mask.path = path.cgPath
-        layer.mask = mask
-    }
-}
-
-extension Comparable {
-    func clamped(_ low: Self, _ high: Self)  ->  Self {
-        var num = self
-        if num < low { num = low }
-        if num > high { num = high }
-        return num
     }
 }
 
