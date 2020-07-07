@@ -80,44 +80,59 @@ class MyViewController: UIViewController {
         return URL(string: urlString)!
     }
     
+    func updateLoadingView(text: String, _ percentage: Int) {
+        DispatchQueue.main.async {
+            if !self.loadingView.indicator.isAnimating {
+                self.loadingView.indicator.startAnimating()
+            }
+            self.loadingView.label.text = "\(text): \(percentage)%"
+        }
+    }
+    
+    func presentUserNotFoundAlert() {
+        DispatchQueue.main.async {
+            let alert = UIAlertController(title: "User Not Found", message: "Verify the entered username \(username) is correct and then reload the playground.", preferredStyle: .alert)
+            self.present(alert, animated: true) {
+                self.loadingView.removeFromSuperview()
+            }
+        }
+    }
+    
     // MARK: - STEP 1
     /// Fetch user comments from the reddit api, recursively called until complete
     func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
         let limit = limit.clamped(1, 1000)
-        self.remainingComments = limit
         let fetchLimit = limit > apiLimit ? apiLimit : limit
-        
-        DispatchQueue.main.async {
-            // update loading indicator (first 40%)
-            if !self.loadingView.indicator.isAnimating {
-                self.loadingView.indicator.startAnimating()
-            }
-            let percentage = Double(fetchLimit) / Double(limit)
-            self.loadingView.label.text = "Fetching: \(Int((percentage * 100) / 2.5))%"
-        }
-        
+        self.remainingComments = limit
+
         let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
         
         URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                print("Error: \(error.localizedDescription)")
+            guard let data = data, error == nil else {
+                print("Error: \(error?.localizedDescription ?? "<nil>")")
                 return
             }
-            if let data = data {
-                if let parent = try? JSONDecoder().decode(JSONParent.self, from: data) {
-                    let comments = parent.data.children.map { $0.data }
-                    
-                    self.comments.append(contentsOf: comments)
-                    self.remainingComments -= fetchLimit
-                    self.after = parent.data.after
-                    
-                    // only finish when all comments are fetched
-                    if self.remainingComments == 0 || self.after == nil {
-                        completion(self.comments)
-                    } else {
-                        self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
-                    }
-                }
+            
+            // decoding will fail if the username does not exist
+            guard let parent = try? JSONDecoder().decode(JSONParent.self, from: data) else {
+                self.presentUserNotFoundAlert()
+                return
+            }
+            
+            let comments = parent.data.children.map { $0.data }
+            
+            self.comments.append(contentsOf: comments)
+            self.remainingComments -= fetchLimit
+            self.after = parent.data.after
+            
+            let percentage = Int(((Double(fetchLimit) / Double(limit)) * 100) / 2.5)
+            self.updateLoadingView(text: "Fetching", percentage)
+            
+            if self.remainingComments == 0 /* all comments are fetched */
+                || self.after == nil /* user has fewer comments than requested */ {
+                completion(self.comments)
+            } else {
+                self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
             }
         }.resume()
     }
@@ -156,11 +171,8 @@ class MyViewController: UIViewController {
                 maxDaysAgo = daysAgo
             }
             
-            DispatchQueue.main.async {
-                // update loading indicator
-                let percentage = Double(index) / Double(comments.count)
-                self.loadingView.label.text = "Parsing: \(40 + Int((percentage * 100) / 2.5))%"
-            }
+            let percentage = 40 + Int(((Double(index) / Double(comments.count)) * 100) / 2.5)
+            updateLoadingView(text: "Parsing", percentage)
         }
         
         let groupedDataPoints = Dictionary(grouping: dataPoints, by: { $0.subreddit })
@@ -175,6 +187,12 @@ class MyViewController: UIViewController {
             var daysAgo = 0
             var points = [Double]()
             
+            // helper for cleaner code
+            func addPoint(point: Double) {
+                points.append(point)
+                daysAgo += 1
+            }
+            
             /* begin filters */
             let exceedsCommentThreshold = dataPoints
                 .filter { $0.count >= minCommentThreshold }
@@ -188,12 +206,6 @@ class MyViewController: UIViewController {
                 continue
             }
             /* end filters */
-            
-            // helper for cleaner code
-            func addPoint(point: Double) {
-                points.append(point)
-                daysAgo += 1
-            }
             
             for dataPoint in dataPoints {
                 // fill in points up to first data point
@@ -214,11 +226,8 @@ class MyViewController: UIViewController {
             series.area = true
             chart.add(series)
             
-            DispatchQueue.main.async {
-                // update loading indicator
-                let percentage = Double(index) / Double(groupedDataPoints.count)
-                self.loadingView.label.text = "Graphing: \(80 + Int((percentage * 100) / 6.66666666666))%"
-            }
+            let percentage = 80 + Int(((Double(index) / Double(groupedDataPoints.count)) * 100) / (20/3))
+            updateLoadingView(text: "Graphing", percentage)
             
             // pair subreddit with series for legend
             plots.append(Plot(subreddit: key, series: series))
@@ -227,9 +236,13 @@ class MyViewController: UIViewController {
         // sort subreddits to be in alphabetical order
         plots.sort(by: { $0.subreddit.lowercased() < $1.subreddit.lowercased() })
         
-        // helpful for debugging
+        // print data -- helpful for debugging
         plots.forEach { print("\($0.subreddit): \(groupedDataPoints[$0.subreddit]!)") }
         
+        prepareForInteraction()
+    }
+    
+    func prepareForInteraction() {
         // enable cycle colors button, generate legend
         DispatchQueue.main.async {
             self.loadingView.label.text = "Finished: 100%"
@@ -308,7 +321,8 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
     }
     
     func collectionView(_ collectionView: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
-        if let selectedIndexPath = collectionView.indexPathsForSelectedItems?.first, selectedIndexPath == indexPath {
+        if let selectedIndexPath = collectionView.indexPathsForSelectedItems?.first,
+            selectedIndexPath == indexPath {
             collectionView.deselectItem(at: indexPath, animated: true)
             
             for plot in plots {
@@ -317,7 +331,6 @@ extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate
                 plot.series.areaAlphaComponent = 0.1
             }
             redrawChart()
-            
             return false
         }
         // animate selection
