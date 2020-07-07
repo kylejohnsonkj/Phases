@@ -14,8 +14,10 @@ let minActiveDays = 1
 // TODO:
 // < > to go through subs
 // < > to expand/limit history
+// custom collection view cell (avoids extension)
+// try equal padding on right side of graph
 
-class MyViewController: UIViewController {
+class PhasesViewController: UIViewController {
     
     var comments = [Comment]()
     var plots = [Plot]()
@@ -31,6 +33,7 @@ class MyViewController: UIViewController {
     
     // graphing
     var chart: Chart!
+    var axisLabels: [AxisLabel]!
     var legend: Legend!
     var cycleTimer: Timer!
     var maxDaysAgo = 0
@@ -48,11 +51,15 @@ class MyViewController: UIViewController {
         chart.minX = 0
         chart.minY = 0
         chart.hideHighlightLineOnTouchEnd = true
+        chart.isHidden = true
         view.addSubview(chart)
         
-        // add labels for each axis
-        let axisLabels = [AxisLabel(.x, period), AxisLabel(.y)]
-        axisLabels.forEach { view.addSubview($0) }
+        // add labels for each axis, hide until graph is loaded
+        axisLabels = [AxisLabel(.x, period), AxisLabel(.y)]
+        for label in axisLabels {
+            label.isHidden = true
+            view.addSubview(label)
+        }
         
         // add legend for associated subreddits
         legend = Legend(frame: CGRect(x: 0, y: 465, width: 750, height: 285), padding: 10)
@@ -68,7 +75,7 @@ class MyViewController: UIViewController {
         
         fetchCommentsForUser(username, limit: maxComments) { comments in
             let groupedDataPoints = self.createGroupedDataPoints(for: comments, period)
-            self.graphDataPoints(groupedDataPoints, self.chart)
+            self.graphDataPoints(groupedDataPoints)
         }
     }
     
@@ -181,7 +188,12 @@ class MyViewController: UIViewController {
     
     // MARK: - STEP 3
     /// Take a dictionary of graph points and plot each series on the chart
-    func graphDataPoints(_ groupedDataPoints: [String : [DataPoint]], _ chart: Chart) {
+    func graphDataPoints(_ groupedDataPoints: [String : [DataPoint]]) {
+        DispatchQueue.main.async {
+            self.chart.isHidden = false
+            self.axisLabels.forEach { $0.isHidden = false }
+        }
+        
         for (index, key) in groupedDataPoints.keys.enumerated() {
             let dataPoints = groupedDataPoints[key] ?? []
             var daysAgo = 0
@@ -287,7 +299,7 @@ class MyViewController: UIViewController {
 }
 
 // MARK: - Chart Legend
-extension MyViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
+extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout {
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return plots.count
@@ -363,6 +375,6 @@ extension UICollectionViewCell {
 }
 
 // Present the view controller in the Live View window
-let vc = MyViewController()
+let vc = PhasesViewController()
 vc.preferredContentSize = CGSize(width: 750, height: 750)
 PlaygroundPage.current.liveView = vc
