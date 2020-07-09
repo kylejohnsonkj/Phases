@@ -61,6 +61,14 @@ public class AxisLabel: UILabel {
     }
 }
 
+public class LegendCell: UICollectionViewCell {
+    // reset cell before reuse (after scroll)
+    public override func prepareForReuse() {
+        contentView.subviews.forEach { $0.removeFromSuperview() }
+        isSelected = false
+    }
+}
+
 public class Legend: UICollectionView {
     public init(frame: CGRect, padding: CGFloat) {
         // AlignedCollectionViewFlowLayout for easy alignment of cells
@@ -72,7 +80,7 @@ public class Legend: UICollectionView {
         
         super.init(frame: frame.insetBy(dx: padding, dy: padding), collectionViewLayout: flowLayout)
         
-        self.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "Cell")
+        self.register(LegendCell.self, forCellWithReuseIdentifier: "Cell")
         self.backgroundColor = .white
     }
     

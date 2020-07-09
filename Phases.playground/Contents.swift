@@ -14,7 +14,6 @@ let minActiveDays = 1
 // TODO:
 // < > to go through subs
 // < > to expand/limit history
-// custom collection view cell (avoids extension)
 // try equal padding on right side of graph
 
 class PhasesViewController: UIViewController {
@@ -306,7 +305,7 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath)
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath) as! LegendCell
         cell.backgroundColor = UIColor(white: 0.9, alpha: 1)
         cell.selectedBackgroundView = UIView(frame: cell.bounds)
         cell.selectedBackgroundView?.backgroundColor = UIColor(white: 0.7, alpha: 1)
@@ -363,14 +362,6 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
             }
         }
         redrawChart()
-    }
-}
-
-extension UICollectionViewCell {
-    // reset cell before reuse (after scroll)
-    open override func prepareForReuse() {
-        contentView.subviews.forEach { $0.removeFromSuperview() }
-        isSelected = false
     }
 }
 
