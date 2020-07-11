@@ -1,7 +1,27 @@
 import Foundation
 import UIKit
 
+public class PhasesButton: UIButton {
+    public init(title: String, frame: CGRect) {
+        super.init(frame: frame)
+        
+        self.setTitleColor(.black, for: .normal)
+        self.setTitleColor(.gray, for: .disabled)
+        self.setTitle(title, for: .normal)
+        self.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
+
+        self.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        self.isEnabled = false
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+}
+
 public class HeaderView: UIView {
+    public var prevSubButton: UIButton!
+    public var nextSubButton: UIButton!
     public var cycleButton: UIButton!
     
     public override init(frame: CGRect) {
@@ -17,13 +37,12 @@ public class HeaderView: UIView {
         subtitle.text = "Enter your reddit username to visualize your subreddit activity"
         self.addSubview(subtitle)
         
-        cycleButton = UIButton(frame: CGRect(x: 560, y: 32.5, width: 95, height: 25))
-        cycleButton.setTitleColor(.black, for: .normal)
-        cycleButton.setTitleColor(.gray, for: .disabled)
-        cycleButton.setTitle("Cycle Colors", for: .normal)
-        cycleButton.backgroundColor = UIColor(white: 0.9, alpha: 1)
-        cycleButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
-        cycleButton.isEnabled = false
+        prevSubButton = PhasesButton(title: "<", frame: CGRect(x: 496, y: 32.5, width: 25, height: 25))
+        self.addSubview(prevSubButton)
+        nextSubButton = PhasesButton(title: ">", frame: CGRect(x: 630, y: 32.5, width: 25, height: 25))
+        self.addSubview(nextSubButton)
+        
+        cycleButton = PhasesButton(title: "Cycle Colors", frame: CGRect(x: 528, y: 32.5, width: 95, height: 25))
         self.addSubview(cycleButton)
         
         let imageView = UIImageView(frame: CGRect(x: 675, y: 15, width: 60, height: 60))

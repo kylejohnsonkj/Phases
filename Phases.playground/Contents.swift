@@ -11,19 +11,15 @@ let maxComments /* min: 1, max: 1000 */ = 200
 let minCommentThreshold = 1
 let minActiveDays = 1
 
-// TODO:
-// < > to go through subs
-// < > to expand/limit history
-// try equal padding on right side of graph
-
 class PhasesViewController: UIViewController {
     
     var comments = [Comment]()
     var plots = [Plot]()
 
-    // view containers
+    // view related
     var header: HeaderView!
     var loadingView: LoadingView!
+    var selectedIndex: Int?
 
     // fetching
     var remainingComments = 0
@@ -40,8 +36,10 @@ class PhasesViewController: UIViewController {
     override func loadView() {
         let view = UIView()
         
-        // create header (title, subtitle, cycle button, icon)
+        // create header (title, subtitle, buttons, icon)
         header = HeaderView(frame: CGRect(x: 0, y: 0, width: 750, height: 90))
+        header.prevSubButton.addTarget(self, action: #selector(prevSub), for: .touchUpInside)
+        header.nextSubButton.addTarget(self, action: #selector(nextSub), for: .touchUpInside)
         header.cycleButton.addTarget(self, action: #selector(cycleColors), for: .touchUpInside)
         view.addSubview(header)
         
@@ -271,12 +269,58 @@ class PhasesViewController: UIViewController {
         }
     }
     
+    func selectPlot(index: Int) {
+        let selectedPlot = plots[index]
+        for plot in plots {
+            let color = plot.series.color
+            if plot == selectedPlot {
+                plot.series.color = color.withAlphaComponent(1)
+                plot.series.areaAlphaComponent = 0.3
+            } else {
+                plot.series.color = color.withAlphaComponent(0.05)
+                plot.series.areaAlphaComponent = 0.05
+            }
+        }
+        redrawChart()
+        
+        header.prevSubButton.isEnabled = index != 0
+        header.nextSubButton.isEnabled = index != plots.count - 1
+        selectedIndex = index
+    }
+    
+    func switchToSub(at index: Int) {
+        legend.selectItem(at: IndexPath(row: index, section: 0), animated: true, scrollPosition: .left)
+        selectPlot(index: index)
+    }
+    
+    @objc func prevSub() {
+        guard var index = selectedIndex else {
+            return  // no current selection
+        }
+        index -= 1
+        switchToSub(at: index)
+    }
+    
+    @objc func nextSub() {
+        guard var index = selectedIndex else {
+            return // no current selection
+        }
+        index += 1
+        switchToSub(at: index)
+    }
+    
     // UIButton action to cycle colors
     // run after delay for UI responsiveness
     @objc func cycleColors() {
         for plot in plots {
             plot.series.color = generateRandomColor()
             plot.series.areaAlphaComponent = 0.1
+            
+            // clear selected subreddit if any
+            if let index = selectedIndex {
+                legend.deselectItem(at: IndexPath(row: index, section: 0), animated: true)
+                clearSelection()
+            }
         }
         redrawChart()
         
@@ -290,6 +334,12 @@ class PhasesViewController: UIViewController {
         chart.removeAllSeries()
         let series = plots.map { $0.series }
         chart.add(series)
+    }
+    
+    func clearSelection() {
+        header.prevSubButton.isEnabled = false
+        header.nextSubButton.isEnabled = false
+        selectedIndex = nil
     }
     
     func generateRandomColor() -> UIColor {
@@ -335,6 +385,7 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
         if let selectedIndexPath = collectionView.indexPathsForSelectedItems?.first,
             selectedIndexPath == indexPath {
             collectionView.deselectItem(at: indexPath, animated: true)
+            clearSelection()
             
             for plot in plots {
                 let color = plot.series.color
@@ -350,18 +401,7 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        let selectedPlot = plots[indexPath.row]
-        for plot in plots {
-            let color = plot.series.color
-            if plot == selectedPlot {
-                plot.series.color = color.withAlphaComponent(1)
-                plot.series.areaAlphaComponent = 0.3
-            } else {
-                plot.series.color = color.withAlphaComponent(0.05)
-                plot.series.areaAlphaComponent = 0.05
-            }
-        }
-        redrawChart()
+        selectPlot(index: indexPath.row)
     }
 }
 
