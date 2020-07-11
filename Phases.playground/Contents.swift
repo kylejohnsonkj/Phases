@@ -1,13 +1,13 @@
 //: View your reddit comment history by phases of subreddit activity
-  
+
 import UIKit
 import PlaygroundSupport
 
 let username = "YOUR_REDDIT_USERNAME"
-let period: Period /* .day, .week, .month */ = .week
+let period: Period /* .hour, .day, .week, .month, .year */ = .week
 let maxComments /* min: 1, max: 1000 */ = 200
 
-// filters
+/* filters - increase to limit to more relevant subs */
 let minCommentThreshold = 1
 let minActiveDays = 1
 
@@ -15,15 +15,15 @@ class PhasesViewController: UIViewController {
     
     var comments = [Comment]()
     var plots = [Plot]()
-
+    
     // view related
     var header: HeaderView!
     var loadingView: LoadingView!
     var selectedIndex: Int?
-
+    
     // fetching
-    var remainingComments = 0
     let apiLimit = 100
+    var remainingComments = 0
     var after: String?
     
     // graphing
@@ -51,7 +51,7 @@ class PhasesViewController: UIViewController {
         chart.isHidden = true
         view.addSubview(chart)
         
-        // add labels for each axis, hide until graph is loaded
+        // add labels for each chart axis
         axisLabels = [AxisLabel(.x, period), AxisLabel(.y)]
         for label in axisLabels {
             label.isHidden = true
@@ -64,7 +64,7 @@ class PhasesViewController: UIViewController {
         legend.delegate = self
         view.addSubview(legend)
         
-        // create loading view for fetching, parsing, graphing
+        // create loading view to visualize progress
         loadingView = LoadingView(frame: CGRect(x: 300, y: 200, width: 150, height: 100))
         view.addSubview(loadingView)
         
@@ -104,11 +104,11 @@ class PhasesViewController: UIViewController {
     
     // MARK: - STEP 1
     /// Fetch user comments from the reddit api, recursively called until complete
-    func fetchCommentsForUser(_ username: String, limit: Int, completion: @escaping ([Comment]) -> ()) {
-        let limit = limit.clamped(1, 1000)
+    func fetchCommentsForUser(_ username: String, limit maxComments: Int, completion: @escaping ([Comment]) -> ()) {
+        let limit = maxComments.clamped(1, 1000)
         let fetchLimit = limit > apiLimit ? apiLimit : limit
         self.remainingComments = limit
-
+        
         let url = getCommentsUrl(username: username, limit: fetchLimit, after: self.after)
         
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -132,8 +132,12 @@ class PhasesViewController: UIViewController {
             let percentage = Int(((Double(fetchLimit) / Double(limit)) * 100) / 2.5)
             self.updateLoadingView(text: "Fetching", percentage)
             
-            if self.remainingComments == 0 /* all comments are fetched */
-                || self.after == nil /* user has fewer comments than requested */ {
+            // nil if user has no more comments to fetch
+            if self.after == nil {
+                self.remainingComments = 0
+            }
+            
+            if self.remainingComments == 0 {
                 completion(self.comments)
             } else {
                 self.fetchCommentsForUser(username, limit: self.remainingComments, completion: completion)
@@ -149,7 +153,7 @@ class PhasesViewController: UIViewController {
         let now = Int(Date().timeIntervalSince1970)
         var daysAgo = 0
         var offset = period.rawValue
-
+        
         for (index, comment) in comments.enumerated() {
             let date = comment.createdUTC
             
@@ -163,14 +167,14 @@ class PhasesViewController: UIViewController {
             let newDataPoint = DataPoint(daysAgo: daysAgo, subreddit: subreddit, count: 1)
             let dataPoint = dataPoints.filter { $0 == newDataPoint }.first
             
-            // modify existing DataPoint if available
+            // modify existing data point if available
             if let dataPoint = dataPoint {
                 dataPoint.count += 1
             } else {
                 dataPoints.append(newDataPoint)
             }
             
-            // kept track of so all series match in length
+            // tracked so all series match in length when graphing
             if daysAgo > maxDaysAgo {
                 maxDaysAgo = daysAgo
             }
@@ -193,16 +197,15 @@ class PhasesViewController: UIViewController {
         
         for (index, key) in groupedDataPoints.keys.enumerated() {
             let dataPoints = groupedDataPoints[key] ?? []
-            var daysAgo = 0
             var points = [Double]()
+            var daysAgo = 0
             
-            // helper for cleaner code
             func addPoint(point: Double) {
                 points.append(point)
                 daysAgo += 1
             }
             
-            /* begin filters */
+            /* begin filtering */
             let exceedsCommentThreshold = dataPoints
                 .filter { $0.count >= minCommentThreshold }
                 .count > 0
@@ -214,14 +217,14 @@ class PhasesViewController: UIViewController {
             if !exceedsActiveDaysThreshold {
                 continue
             }
-            /* end filters */
+            /* end filtering */
             
             for dataPoint in dataPoints {
                 // fill in points up to first data point
                 while daysAgo < dataPoint.daysAgo {
                     addPoint(point: 0)
                 }
-                // add point (x: period ago, y: number of comments in sub)
+                // add point (x: period ago, y: number of comments in sub for that period)
                 addPoint(point: Double(dataPoint.count))
             }
             // fill in points after last data point
@@ -245,31 +248,28 @@ class PhasesViewController: UIViewController {
         // sort subreddits to be in alphabetical order
         plots.sort(by: { $0.subreddit.lowercased() < $1.subreddit.lowercased() })
         
-        // print data -- helpful for debugging
+        // print data for easy viewing
         plots.forEach { print("\($0.subreddit): \(groupedDataPoints[$0.subreddit]!)") }
         
         prepareForInteraction()
     }
     
     func prepareForInteraction() {
-        // enable cycle colors button, generate legend
         DispatchQueue.main.async {
             self.loadingView.label.text = "Finished: 100%"
             self.loadingView.indicator.stopAnimating()
             self.header.cycleButton.isEnabled = true
             self.legend.reloadData()
         }
-        // show legend scroll indicators
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             self.legend.flashScrollIndicators()
         }
-        // remove loading view
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             self.loadingView.removeFromSuperview()
         }
     }
     
-    func selectPlot(index: Int) {
+    func selectPlot(at index: Int) {
         let selectedPlot = plots[index]
         for plot in plots {
             let color = plot.series.color
@@ -290,33 +290,30 @@ class PhasesViewController: UIViewController {
     
     func switchToSub(at index: Int) {
         legend.selectItem(at: IndexPath(row: index, section: 0), animated: true, scrollPosition: .left)
-        selectPlot(index: index)
+        selectPlot(at: index)
     }
     
     @objc func prevSub() {
-        guard var index = selectedIndex else {
-            return  // no current selection
-        }
+        // do nothing if no sub is currently selected
+        guard var index = selectedIndex else { return }
         index -= 1
         switchToSub(at: index)
     }
     
     @objc func nextSub() {
-        guard var index = selectedIndex else {
-            return // no current selection
-        }
+        guard var index = selectedIndex else { return }
         index += 1
         switchToSub(at: index)
     }
     
     // UIButton action to cycle colors
-    // run after delay for UI responsiveness
+    // collection view is reloaded after delay for UI responsiveness
     @objc func cycleColors() {
         for plot in plots {
             plot.series.color = generateRandomColor()
             plot.series.areaAlphaComponent = 0.1
             
-            // clear selected subreddit if any
+            // clear selected subreddit, if any
             if let index = selectedIndex {
                 legend.deselectItem(at: IndexPath(row: index, section: 0), animated: true)
                 clearSelection()
@@ -373,11 +370,11 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
         
         return cell
     }
-  
+    
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
         let label = UILabel()
         label.text = plots[indexPath.row].subreddit
-        let size = label.intrinsicContentSize
+        let size = label.intrinsicContentSize  // size cell based off label width
         return CGSize(width: size.width + 25, height: size.height)
     }
     
@@ -401,7 +398,7 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        selectPlot(index: indexPath.row)
+        selectPlot(at: indexPath.row)
     }
 }
 

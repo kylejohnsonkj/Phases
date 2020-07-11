@@ -1,24 +1,6 @@
 import Foundation
 import UIKit
 
-public class PhasesButton: UIButton {
-    public init(title: String, frame: CGRect) {
-        super.init(frame: frame)
-        
-        self.setTitleColor(.black, for: .normal)
-        self.setTitleColor(.gray, for: .disabled)
-        self.setTitle(title, for: .normal)
-        self.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
-
-        self.backgroundColor = UIColor(white: 0.9, alpha: 1)
-        self.isEnabled = false
-    }
-    
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-}
-
 public class HeaderView: UIView {
     public var prevSubButton: UIButton!
     public var nextSubButton: UIButton!
@@ -37,17 +19,60 @@ public class HeaderView: UIView {
         subtitle.text = "Enter your reddit username to visualize your subreddit activity"
         self.addSubview(subtitle)
         
-        prevSubButton = PhasesButton(title: "<", frame: CGRect(x: 496, y: 32.5, width: 25, height: 25))
+        prevSubButton = createButton(title: "<", frame: CGRect(x: 496, y: 32.5, width: 25, height: 25))
+        nextSubButton = createButton(title: ">", frame: CGRect(x: 630, y: 32.5, width: 25, height: 25))
         self.addSubview(prevSubButton)
-        nextSubButton = PhasesButton(title: ">", frame: CGRect(x: 630, y: 32.5, width: 25, height: 25))
         self.addSubview(nextSubButton)
         
-        cycleButton = PhasesButton(title: "Cycle Colors", frame: CGRect(x: 528, y: 32.5, width: 95, height: 25))
+        cycleButton = createButton(title: "Cycle Colors", frame: CGRect(x: 528, y: 32.5, width: 95, height: 25))
         self.addSubview(cycleButton)
         
         let imageView = UIImageView(frame: CGRect(x: 675, y: 15, width: 60, height: 60))
         imageView.image = UIImage(named: "reddit-logo")
         self.addSubview(imageView)
+    }
+    
+    func createButton(title: String, frame: CGRect) -> UIButton {
+        let button = UIButton(frame: frame)
+        button.setTitleColor(.black, for: .normal)
+        button.setTitleColor(.gray, for: .disabled)
+        button.titleLabel?.font = .systemFont(ofSize: 14, weight: .regular)
+        button.setTitle(title, for: .normal)
+        
+        button.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        button.isEnabled = false
+        return button
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+}
+
+public class LoadingView: UIView {
+    public var label: UILabel!
+    public var indicator: UIActivityIndicatorView!
+    
+    public override init(frame: CGRect) {
+        super.init(frame: frame)
+        
+        self.backgroundColor = UIColor(white: 0.25, alpha: 0.75)
+        self.roundCorners(corners: .allCorners, radius: 10)
+        
+        // create activity indicator
+        indicator = UIActivityIndicatorView(style: .large)
+        indicator.color = .white
+        indicator.frame = CGRect(x: 50, y: 10, width: 50, height: 50)
+        indicator.hidesWhenStopped = false
+        self.addSubview(indicator)
+        
+        // create progress label
+        label = UILabel(frame: CGRect(x: 0, y: 60, width: 150, height: 30))
+        label.font = .systemFont(ofSize: 18, weight: .medium)
+        label.textAlignment = .center
+        label.textColor = .white
+        label.text = "Started: 0%"
+        self.addSubview(label)
     }
     
     required init?(coder: NSCoder) {
@@ -81,7 +106,7 @@ public class AxisLabel: UILabel {
 }
 
 public class LegendCell: UICollectionViewCell {
-    // reset cell before reuse (after scroll)
+    // fix reused cell appearance on scroll
     public override func prepareForReuse() {
         contentView.subviews.forEach { $0.removeFromSuperview() }
         isSelected = false
@@ -101,37 +126,6 @@ public class Legend: UICollectionView {
         
         self.register(LegendCell.self, forCellWithReuseIdentifier: "Cell")
         self.backgroundColor = .white
-    }
-    
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-}
-
-public class LoadingView: UIView {
-    public var label: UILabel!
-    public var indicator: UIActivityIndicatorView!
-    
-    public override init(frame: CGRect) {
-        super.init(frame: frame)
-        
-        self.backgroundColor = UIColor(white: 0.25, alpha: 0.75)
-        self.roundCorners(corners: .allCorners, radius: 10)
-        
-        // create activity indicator
-        indicator = UIActivityIndicatorView(style: .large)
-        indicator.color = .white
-        indicator.frame = CGRect(x: 50, y: 10, width: 50, height: 50)
-        indicator.hidesWhenStopped = false
-        self.addSubview(indicator)
-        
-        // create progress label
-        label = UILabel(frame: CGRect(x: 0, y: 60, width: 150, height: 30))
-        label.font = .systemFont(ofSize: 18, weight: .medium)
-        label.textAlignment = .center
-        label.textColor = .white
-        label.text = "Started: 0%"
-        self.addSubview(label)
     }
     
     required init?(coder: NSCoder) {
