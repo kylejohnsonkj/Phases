@@ -404,5 +404,5 @@ extension PhasesViewController: UICollectionViewDataSource, UICollectionViewDele
 
 // Present the view controller in the Live View window
 let vc = PhasesViewController()
-vc.preferredContentSize = CGSize(width: 750, height: 750)
+vc.view.frame = CGRect(x: 0, y: 0, width: 750, height: 750)
 PlaygroundPage.current.liveView = vc
